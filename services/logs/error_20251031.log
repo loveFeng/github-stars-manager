@@ -1,0 +1,29 @@
+2025-10-31 12:48:15 - GitHubStarsManager - ERROR - [UNKNOWN_ERROR] 操作失败 | category=DATABASE | original_error=随机错误 | original_traceback=Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+2025-10-31 12:48:15 - GitHubStarsManager - ERROR - [UNKNOWN_ERROR] 操作失败 | category=DATABASE | original_error=随机错误 | original_traceback=Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+2025-10-31 12:48:19 - GitHubStarsManager - ERROR - 这是错误 | error_code=DB_001

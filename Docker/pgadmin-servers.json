@@ -1,0 +1,34 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "Local Database",
+            "Group": "Local",
+            "Host": "postgres",
+            "Port": 5432,
+            "MaintenanceDB": "postgres",
+            "Username": "${POSTGRES_USER}",
+            "Password": "${POSTGRES_PASSWORD}",
+            "SSLMode": "prefer",
+            "SSLCert": "<STORAGE_DIR>/.postgresql",
+            "SSLKey": "<STORAGE_DIR>/.postgresql",
+            "SSLRootCert": "<STORAGE_DIR>/.postgresql",
+            "SSLCRL": "",
+            "Comment": "Local PostgreSQL Database",
+            "UseSSHTunnel": 0,
+            "TunnelHost": "",
+            "TunnelPort": "",
+            "TunnelUser": "",
+            "TunnelAuthentication": 0,
+            "TunnelPassword": "",
+            "ShowSystemObjects": true,
+            "ShowTempObjects": true,
+            "DbRestriction": "",
+            "SplitMode": 0,
+            "SQLFilter": "",
+            "bgcolor": "",
+            "fgcolor": "",
+            "email": "",
+            "comment": ""
+        }
+    }
+}

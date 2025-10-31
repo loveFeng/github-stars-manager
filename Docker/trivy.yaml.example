@@ -1,0 +1,115 @@
+# Trivy 配置示例
+# 用于 Docker 镜像安全扫描
+
+format: table
+
+# 漏洞数据库更新
+db:
+  repository: ghcr.io/aquasecurity/trivy-db
+  light: false
+  skip-update: false
+
+# 扫描选项
+scan:
+  # 并行扫描
+  parallelism: 1
+  
+  # 超时时间
+  timeout: 5m
+  
+  # 跳过文件
+  skip-files:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/coverage/**"
+
+# 报告格式
+report:
+  format: table
+  output: /tmp/trivy-report.txt
+  
+  # 严重性级别
+  severity: HIGH,CRITICAL
+  
+  # 忽略的漏洞 CVE ID
+  ignore-unfixed: true
+
+# 安全策略
+security:
+  # 仅报告已知漏洞
+  only-fixed: true
+  
+  # 忽略的漏洞
+  ignore:
+    - CVE-2023-12345
+    - CVE-2023-67890
+
+# 缓存配置
+cache:
+  dir: /tmp/trivy-cache
+  ttl: 24h
+
+# 输出选项
+quiet: false
+debug: false
+no-progress: false
+
+# 日志配置
+log:
+  level: info
+  file: /tmp/trivy.log
+
+# 通知配置
+notification:
+  webhook:
+    url: ""
+    token: ""
+
+# 信任配置
+trust:
+  # 信任的签名者
+  signers:
+    - org1
+    - org2
+  
+  # 信任的证书
+  cert:
+    - path: /path/to/ca.pem
+      name: MyCA
+
+# 策略配置
+policy:
+  # 策略文件路径
+  file: /path/to/policy.rego
+  
+  # 策略包
+  packages:
+    - name: custom-policies
+      path: /path/to/policies/
+
+# 高级配置
+advanced:
+  # 数据库镜像
+  db:
+    mirror: ""
+    light: false
+    
+  # 扫描深度
+  scan:
+    depth: 1
+    
+    # 递归扫描
+    recursive: false
+  
+  # 过滤选项
+  filter:
+    # 过滤的条件
+    conditions:
+      - severity: HIGH
+        fix-available: true
+      - severity: CRITICAL
+    
+    # 排除的条件
+    exclude:
+      - path: "**/test/**"
+      - type: "os-pkgs"

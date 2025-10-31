@@ -1,0 +1,37 @@
+2025-10-31 12:47:24 - GitHubStarsManager - INFO - 测试日志功能
+2025-10-31 12:48:15 - GitHubStarsManager - ERROR - [UNKNOWN_ERROR] 操作失败 | category=DATABASE | original_error=随机错误 | original_traceback=Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+2025-10-31 12:48:15 - GitHubStarsManager - ERROR - [UNKNOWN_ERROR] 操作失败 | category=DATABASE | original_error=随机错误 | original_traceback=Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+Traceback (most recent call last):
+  File "/workspace/services/error_handler.py", line 407, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/services/test_error_handler.py", line 69, in risky_function
+    raise Exception("随机错误")
+Exception: 随机错误
+2025-10-31 12:48:16 - GitHubStarsManager - DEBUG - Function executed | function=slow_function | duration_ms=1000.07
+2025-10-31 12:48:16 - GitHubStarsManager - WARNING - Attempt 1/3 failed, retrying in 0.5s... | function=unstable_operation | error=网络错误
+2025-10-31 12:48:17 - GitHubStarsManager - WARNING - Attempt 2/3 failed, retrying in 1.0s... | function=unstable_operation | error=网络错误
+2025-10-31 12:48:19 - GitHubStarsManager - WARNING - Circuit breaker entering OPEN state | name=TestCircuit | failure_count=3
+2025-10-31 12:48:19 - GitHubStarsManager - DEBUG - 这是调试信息 | user_id=123
+2025-10-31 12:48:19 - GitHubStarsManager - INFO - 这是信息日志 | action=sync_repos
+2025-10-31 12:48:19 - GitHubStarsManager - WARNING - 这是警告 | api_calls=4500
+2025-10-31 12:48:19 - GitHubStarsManager - ERROR - 这是错误 | error_code=DB_001

@@ -1,0 +1,893 @@
+# =============================================================================
+# Docker Compose 优化配置文件
+# 版本: 2.0
+# 日期: 2025-10-31
+# 优化内容: 资源限制、日志管理、安全加固、性能优化
+# =============================================================================
+
+version: '3.8'
+
+# =============================================================================
+# 密钥管理
+# =============================================================================
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+
+# =============================================================================
+# 服务定义
+# =============================================================================
+services:
+  # ---------------------------------------------------------------------------
+  # Nginx 反向代理
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: github-stars-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+      - static-files:/usr/share/nginx/html
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - frontend-network
+      - backend-network
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service,environment"
+        tag: "nginx/{{.ID}}"
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETGID
+      - SETUID
+    
+    labels:
+      com.github-stars-manager.service: "nginx"
+      com.github-stars-manager.description: "反向代理和负载均衡"
+
+  # ---------------------------------------------------------------------------
+  # 前端应用
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile
+      target: frontend
+      args:
+        NODE_ENV: production
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        VCS_REF: ${VCS_REF:-unknown}
+        VERSION: ${VERSION:-1.0.0}
+      cache_from:
+        - github-stars-frontend:latest
+    
+    container_name: github-stars-frontend
+    restart: unless-stopped
+    
+    volumes:
+      - static-files:/usr/share/nginx/html
+    
+    networks:
+      - frontend-network
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "frontend/{{.ID}}"
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 安全配置
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETGID
+      - SETUID
+    
+    labels:
+      com.github-stars-manager.service: "frontend"
+      com.github-stars-manager.description: "前端 React 应用"
+
+  # ---------------------------------------------------------------------------
+  # 后端 API 服务
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile
+      target: backend
+      args:
+        NODE_ENV: production
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        VCS_REF: ${VCS_REF:-unknown}
+        VERSION: ${VERSION:-1.0.0}
+      cache_from:
+        - github-stars-backend:latest
+    
+    container_name: github-stars-backend
+    restart: unless-stopped
+    
+    ports:
+      - "3001:3001"
+    
+    env_file:
+      - ./.env
+    
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-github_stars_db}
+      - DB_USER=${DB_USER:-app_user}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # 使用密钥文件
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      # Node.js 优化
+      - NODE_OPTIONS=--max-old-space-size=768
+      - UV_THREADPOOL_SIZE=4
+    
+    secrets:
+      - db_password
+      - redis_password
+      - jwt_secret
+    
+    volumes:
+      - ./logs/backend:/app/logs
+      - uploads:/app/uploads
+      - backend-tmp:/tmp
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    networks:
+      - backend-network
+      - database-network
+      - cache-network
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+        compress: "true"
+        tag: "backend/{{.ID}}"
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    
+    labels:
+      com.github-stars-manager.service: "backend"
+      com.github-stars-manager.description: "Node.js 后端 API"
+      com.github-stars-manager.backup: "exclude"
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 数据库
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: github-stars-postgres
+    restart: unless-stopped
+    
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    
+    environment:
+      - POSTGRES_DB=${DB_NAME:-github_stars_db}
+      - POSTGRES_USER=${DB_USER:-app_user}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      # PostgreSQL 性能优化
+      - POSTGRES_SHARED_BUFFERS=256MB
+      - POSTGRES_EFFECTIVE_CACHE_SIZE=1GB
+      - POSTGRES_WORK_MEM=16MB
+      - POSTGRES_MAINTENANCE_WORK_MEM=128MB
+    
+    secrets:
+      - db_password
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./logs/postgres:/var/log/postgresql
+      - postgres-backups:/backups
+    
+    networks:
+      - database-network
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+        compress: "true"
+        tag: "postgres/{{.ID}}"
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-app_user} -d ${DB_NAME:-github_stars_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    
+    # PostgreSQL 优化配置
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=128MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=16MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c max_worker_processes=4
+      -c max_parallel_workers_per_gather=2
+      -c max_parallel_workers=4
+      -c max_parallel_maintenance_workers=2
+      -c log_statement=all
+      -c log_destination=stderr
+      -c logging_collector=on
+      -c log_directory=/var/log/postgresql
+      -c log_filename=postgresql-%Y-%m-%d_%H%M%S.log
+      -c log_rotation_age=1d
+      -c log_rotation_size=100MB
+    
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    
+    labels:
+      com.github-stars-manager.service: "postgres"
+      com.github-stars-manager.description: "PostgreSQL 数据库"
+      com.github-stars-manager.backup: "daily"
+
+  # ---------------------------------------------------------------------------
+  # Redis 缓存
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: github-stars-redis
+    restart: unless-stopped
+    
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    
+    networks:
+      - cache-network
+    
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD:-changeme}
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "redis/{{.ID}}"
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    
+    labels:
+      com.github-stars-manager.service: "redis"
+      com.github-stars-manager.description: "Redis 缓存服务"
+      com.github-stars-manager.backup: "daily"
+
+  # ---------------------------------------------------------------------------
+  # 数据库备份服务
+  # ---------------------------------------------------------------------------
+  db-backup:
+    image: postgres:15-alpine
+    container_name: github-stars-db-backup
+    restart: unless-stopped
+    
+    environment:
+      - POSTGRES_DB=${DB_NAME:-github_stars_db}
+      - POSTGRES_USER=${DB_USER:-app_user}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - BACKUP_RETENTION_DAYS=7
+    
+    secrets:
+      - db_password
+    
+    volumes:
+      - postgres-backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    
+    networks:
+      - database-network
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    # 每天凌晨2点执行备份
+    command: |
+      sh -c '
+      while true; do
+        TIMESTAMP=$$(date +%Y%m%d_%H%M%S)
+        echo "Starting backup at $$TIMESTAMP"
+        PGPASSWORD=$$(cat /run/secrets/db_password) pg_dump \
+          -h postgres \
+          -U $$POSTGRES_USER \
+          -d $$POSTGRES_DB \
+          -F c \
+          -f /backups/backup_$$TIMESTAMP.dump
+        
+        # 压缩备份
+        gzip /backups/backup_$$TIMESTAMP.dump
+        
+        # 清理旧备份
+        find /backups -name "backup_*.dump.gz" -mtime +$$BACKUP_RETENTION_DAYS -delete
+        
+        echo "Backup completed at $$(date +%Y%m%d_%H%M%S)"
+        
+        # 等待24小时
+        sleep 86400
+      done
+      '
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+        tag: "db-backup/{{.ID}}"
+    
+    labels:
+      com.github-stars-manager.service: "db-backup"
+      com.github-stars-manager.description: "数据库自动备份"
+    
+    profiles:
+      - backup
+
+  # ---------------------------------------------------------------------------
+  # 数据库管理工具 pgAdmin (开发环境)
+  # ---------------------------------------------------------------------------
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: github-stars-pgadmin
+    restart: unless-stopped
+    
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_EMAIL:-admin@example.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_PASSWORD:-admin123}
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+    
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    networks:
+      - database-network
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+        tag: "pgadmin/{{.ID}}"
+    
+    labels:
+      com.github-stars-manager.service: "pgadmin"
+      com.github-stars-manager.description: "数据库管理界面"
+    
+    profiles:
+      - tools
+
+  # ---------------------------------------------------------------------------
+  # Prometheus 监控
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: github-stars-prometheus
+    restart: unless-stopped
+    
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alertmanager/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    
+    networks:
+      - monitoring-network
+      - backend-network
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "prometheus/{{.ID}}"
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    labels:
+      com.github-stars-manager.service: "prometheus"
+      com.github-stars-manager.description: "监控指标收集"
+    
+    profiles:
+      - monitoring
+
+  # ---------------------------------------------------------------------------
+  # Grafana 可视化
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: github-stars-grafana
+    restart: unless-stopped
+    
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    networks:
+      - monitoring-network
+    
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "grafana/{{.ID}}"
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    labels:
+      com.github-stars-manager.service: "grafana"
+      com.github-stars-manager.description: "监控数据可视化"
+    
+    profiles:
+      - monitoring
+
+  # ---------------------------------------------------------------------------
+  # Node Exporter (系统指标)
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: github-stars-node-exporter
+    restart: unless-stopped
+    
+    ports:
+      - "9100:9100"
+    
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    
+    networks:
+      - monitoring-network
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+        tag: "node-exporter/{{.ID}}"
+    
+    labels:
+      com.github-stars-manager.service: "node-exporter"
+      com.github-stars-manager.description: "系统指标导出"
+    
+    profiles:
+      - monitoring
+
+# =============================================================================
+# 数据卷定义
+# =============================================================================
+volumes:
+  # 数据库数据
+  postgres-data:
+    name: github-stars-manager_postgres-data
+    driver: local
+    labels:
+      com.github-stars-manager.description: "PostgreSQL 数据库数据"
+      com.github-stars-manager.backup: "critical"
+  
+  # 数据库备份
+  postgres-backups:
+    name: github-stars-manager_postgres-backups
+    driver: local
+    labels:
+      com.github-stars-manager.description: "数据库备份文件"
+      com.github-stars-manager.backup: "archive"
+  
+  # Redis 数据
+  redis-data:
+    name: github-stars-manager_redis-data
+    driver: local
+    labels:
+      com.github-stars-manager.description: "Redis 缓存数据"
+      com.github-stars-manager.backup: "daily"
+  
+  # pgAdmin 数据
+  pgadmin-data:
+    name: github-stars-manager_pgadmin-data
+    driver: local
+    labels:
+      com.github-stars-manager.description: "pgAdmin 配置数据"
+  
+  # Prometheus 数据
+  prometheus-data:
+    name: github-stars-manager_prometheus-data
+    driver: local
+    labels:
+      com.github-stars-manager.description: "Prometheus 监控数据"
+  
+  # Grafana 数据
+  grafana-data:
+    name: github-stars-manager_grafana-data
+    driver: local
+    labels:
+      com.github-stars-manager.description: "Grafana 配置和仪表板"
+  
+  # 静态文件
+  static-files:
+    name: github-stars-manager_static-files
+    driver: local
+    labels:
+      com.github-stars-manager.description: "前端静态文件"
+  
+  # 用户上传文件
+  uploads:
+    name: github-stars-manager_uploads
+    driver: local
+    labels:
+      com.github-stars-manager.description: "用户上传文件"
+      com.github-stars-manager.backup: "daily"
+  
+  # 后端临时文件
+  backend-tmp:
+    name: github-stars-manager_backend-tmp
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+    labels:
+      com.github-stars-manager.description: "后端临时文件"
+
+# =============================================================================
+# 网络定义
+# =============================================================================
+networks:
+  # 前端网络
+  frontend-network:
+    name: github-stars-manager_frontend
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.1.0/24
+    labels:
+      com.github-stars-manager.description: "前端服务网络"
+  
+  # 后端网络
+  backend-network:
+    name: github-stars-manager_backend
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.2.0/24
+    labels:
+      com.github-stars-manager.description: "后端服务网络"
+  
+  # 数据库网络
+  database-network:
+    name: github-stars-manager_database
+    driver: bridge
+    internal: true  # 内部网络，外部无法访问
+    ipam:
+      config:
+        - subnet: 172.20.3.0/24
+    labels:
+      com.github-stars-manager.description: "数据库服务网络（内部）"
+  
+  # 缓存网络
+  cache-network:
+    name: github-stars-manager_cache
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.20.4.0/24
+    labels:
+      com.github-stars-manager.description: "缓存服务网络（内部）"
+  
+  # 监控网络
+  monitoring-network:
+    name: github-stars-manager_monitoring
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.5.0/24
+    labels:
+      com.github-stars-manager.description: "监控服务网络"
+
+# =============================================================================
+# 配置说明
+# =============================================================================
+# 
+# 启动方式:
+#   基础服务:        docker-compose -f docker-compose.optimized.yml up -d
+#   包含开发工具:    docker-compose -f docker-compose.optimized.yml --profile tools up -d
+#   包含监控:        docker-compose -f docker-compose.optimized.yml --profile monitoring up -d
+#   包含备份:        docker-compose -f docker-compose.optimized.yml --profile backup up -d
+#   完整环境:        docker-compose -f docker-compose.optimized.yml --profile tools --profile monitoring --profile backup up -d
+#
+# 优化特性:
+#   ✅ 资源限制: 所有服务都配置了 CPU 和内存限制
+#   ✅ 日志管理: 配置了日志轮转和大小限制
+#   ✅ 安全加固: 使用 secrets、只读文件系统、能力限制
+#   ✅ 网络隔离: 多个网络分离不同服务类型
+#   ✅ 健康检查: 完善的健康检查配置
+#   ✅ 自动备份: 数据库自动备份服务
+#   ✅ 监控集成: Prometheus + Grafana 监控栈
+#   ✅ 标签管理: 完整的标签系统便于管理
+#
+# 环境要求:
+#   - Docker Engine 20.10+
+#   - Docker Compose 2.0+
+#   - 最小 4GB RAM
+#   - 推荐 8GB RAM
+#
+# 安全注意事项:
+#   1. 修改所有默认密码
+#   2. 创建 secrets 目录并设置正确权限: chmod 600 secrets/*
+#   3. 配置 SSL 证书
+#   4. 限制暴露端口
+#   5. 定期更新镜像
+#
+# =============================================================================
