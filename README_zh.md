@@ -57,7 +57,7 @@
 ```bash
 # 克隆仓库
 git clone https://github.com/loveFeng/github-stars-manager.git
-cd github-stars-manager-sqlite
+cd github-stars-manager
 
 # 配置环境变量
 cp Docker/.env.example Docker/.env

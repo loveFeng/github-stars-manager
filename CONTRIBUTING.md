@@ -15,7 +15,7 @@
 2. **克隆您的 Fork**
    ```bash
    git clone https://github.com/loveFeng/github-stars-manager.git
-   cd github-stars-manager-sqlite
+   cd github-stars-manager
    ```
 
 3. **设置上游分支**
@@ -261,7 +261,7 @@ npm run test:performance
 ### 项目结构
 
 ```
-github-stars-manager-sqlite/
+github-stars-manager/
 ├── github-stars-manager-frontend/  # React 前端
 │   ├── src/components/            # 可复用组件
 │   ├── src/pages/                 # 页面组件

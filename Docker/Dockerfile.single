@@ -1,0 +1,74 @@
+# GitHub Stars Manager - Single Container
+# 多阶段构建 Dockerfile
+
+# 第一阶段：构建前端
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# 复制 package.json 和锁定文件
+COPY github-stars-manager-frontend/package*.json ./
+
+# 安装依赖
+RUN npm ci --only=production
+
+# 复制前端源代码
+COPY github-stars-manager-frontend/ .
+
+# 构建前端
+RUN npm run build
+
+# 第二阶段：后端服务构建
+FROM python:3.9-slim AS backend
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    curl \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建数据库目录
+RUN mkdir -p /app/database
+
+# 安装Python依赖
+COPY services/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制后端服务代码
+COPY services/ .
+
+# 复制数据库初始化脚本
+COPY database/init.sql /app/database/
+
+# 复制前端构建文件到nginx目录
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
+
+# 创建数据目录
+RUN mkdir -p /app/data && chown -R nginx:nginx /app/data
+
+# 初始化数据库
+RUN sqlite3 /app/data/github_stars.db < /app/database/init.sql
+
+# 创建nginx配置文件
+COPY nginx/docker-nginx.conf /etc/nginx/nginx.conf
+
+# 创建启动脚本
+COPY start-single-container.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# 暴露端口
+EXPOSE 3000
+
+# 设置环境变量
+ENV PYTHONPATH=/app/services
+ENV DB_PATH=/app/data/github_stars.db
+ENV PORT=3000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# 启动命令
+CMD ["/app/start.sh"]

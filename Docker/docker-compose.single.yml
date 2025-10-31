@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  github-stars-manager:
+    build:
+      context: ..
+      dockerfile: Docker/Dockerfile.single
+    container_name: github-stars-manager
+    ports:
+      - "3000:3000"
+    environment:
+      # GitHub 配置
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-your_github_token_here}
+      
+      # AI 配置
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_key_here}
+      - OPENAI_API_URL=${OPENAI_API_URL:-https://api.openai.com/v1}
+      
+      # WebDAV 备份配置
+      - WEBDAV_URL=${WEBDAV_URL:-your_webdav_url_here}
+      - WEBDAV_USERNAME=${WEBDAV_USERNAME:-your_webdav_username}
+      - WEBDAV_PASSWORD=${WEBDAV_PASSWORD:-your_webdav_password}
+      
+      # 应用配置
+      - PORT=3000
+      - DB_PATH=/app/data/github_stars.db
+      
+      # Python 环境
+      - PYTHONPATH=/app/services
+      - ENVIRONMENT=production
+    
+    volumes:
+      # 数据持久化
+      - github_stars_data:/app/data
+      - github_stars_logs:/app/logs
+      - github_stars_backup:/app/backup
+    
+    # 重启策略
+    restart: unless-stopped
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    
+    # 网络配置
+    networks:
+      - github-stars-network
+    
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  github_stars_data:
+    driver: local
+  github_stars_logs:
+    driver: local
+  github_stars_backup:
+    driver: local
+
+networks:
+  github-stars-network:
+    driver: bridge

@@ -26,7 +26,7 @@
 
 ### 3. 仓库名称更新
 
-将仓库名从 `github-stars-manager-sqlite` 更新为 `github-stars-manager`:
+已确认所有仓库名称引用。
 - GitHub部署指南中的仓库名称
 - 相关文档中的仓库引用
 
@@ -46,7 +46,7 @@
 
 **替换前**:
 ```
-https://github.com/your-username/github-stars-manager-sqlite
+https://github.com/loveFeng/github-stars-manager
 ```
 
 **替换后**:

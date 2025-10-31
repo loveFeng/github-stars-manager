@@ -246,7 +246,7 @@
 ## 📁 项目文件结构
 
 ```
-github-stars-manager-sqlite/
+github-stars-manager/
 ├── database/                          # 数据库相关
 │   ├── schema_design.md              # 数据库架构设计 (633行)
 │   ├── init.sql                      # 初始化脚本 (565行)
@@ -352,7 +352,7 @@ github-stars-manager-sqlite/
 ```bash
 # 1. 克隆项目
 git clone <repository-url>
-cd github-stars-manager-sqlite
+cd github-stars-manager
 
 # 2. 进入 Docker 目录
 cd Docker

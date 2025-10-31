@@ -57,7 +57,7 @@ Visit the live application: **[https://unkmn8l5lzrt.space.minimax.io](https://un
 ```bash
 # Clone the repository
 git clone https://github.com/loveFeng/github-stars-manager.git
-cd github-stars-manager-sqlite
+cd github-stars-manager
 
 # Configure environment variables
 cp Docker/.env.example Docker/.env
